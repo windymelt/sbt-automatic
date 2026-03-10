@@ -58,7 +58,7 @@ _sbt_automatic_enter() {
     echo "$count" > "$ref_file"
     if [[ $count -eq 1 ]]; then
         _sbt_automatic_log "starting sbt server" "$sbt_root"
-        nohup sbt --server --no-colors "exit" &>/dev/null &
+        nohup sbt --server --no-colors &>/dev/null &
     fi
     export _SBT_AUTOMATIC_ROOT="$sbt_root"
 }
