@@ -60,7 +60,7 @@ _sbt_automatic_enter() {
         _sbt_automatic_log "starting sbt server" "$sbt_root"
         sleep infinity | nohup sbt --server --batch --no-colors >> "${sbt_root}/.sbt-automatic-log" 2>&1 &
     fi
-    export _SBT_AUTOMATIC_ROOT="$sbt_root"
+    _SBT_AUTOMATIC_ROOT="$sbt_root"
 }
 
 _sbt_automatic_chpwd() {
