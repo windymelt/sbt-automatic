@@ -40,7 +40,7 @@ _sbt_automatic_leave() {
 
     if [[ $count -le 0 ]]; then
         _sbt_automatic_log "stopping sbt server" "$prev_root"
-        (cd "$prev_root" && sbt --client "shutdown" &>/dev/null)
+        (cd "$prev_root" && sbt --client "shutdown" >> "${prev_root}/.sbt-automatic-log" 2>&1)
         rm -f "$ref_file"
     else
         echo "$count" > "$ref_file"
@@ -58,7 +58,7 @@ _sbt_automatic_enter() {
     echo "$count" > "$ref_file"
     if [[ $count -eq 1 ]]; then
         _sbt_automatic_log "starting sbt server" "$sbt_root"
-        nohup sbt --server --no-colors &>/dev/null &
+        nohup sbt --server --no-colors >> "${sbt_root}/.sbt-automatic-log" 2>&1 &
     fi
     export _SBT_AUTOMATIC_ROOT="$sbt_root"
 }
