@@ -35,15 +35,20 @@ _sbt_automatic_leave() {
     local prev_root="$1"
     local ref_file
     ref_file=$(_sbt_automatic_ref_file "$prev_root")
-    local count
-    count=$(( $(cat "$ref_file" 2>/dev/null || echo 0) - 1 ))
+    local count pid
+    count=$(( $(sed -n '1p' "$ref_file" 2>/dev/null || echo 0) - 1 ))
+    pid=$(sed -n '2p' "$ref_file" 2>/dev/null)
 
     if [[ $count -le 0 ]]; then
-        _sbt_automatic_log "stopping sbt server" "$prev_root"
-        (cd "$prev_root" && sbt --client "shutdown" >> "${prev_root}/.sbt-automatic-log" 2>&1)
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            _sbt_automatic_log "stopping sbt server (pid=$pid)" "$prev_root"
+            (cd "$prev_root" && sbt --client "shutdown" >> "${prev_root}/.sbt-automatic-log" 2>&1)
+        else
+            _sbt_automatic_log "sbt server already dead (pid=$pid)" "$prev_root"
+        fi
         rm -f "$ref_file"
     else
-        echo "$count" > "$ref_file"
+        printf '%s\n%s\n' "$count" "$pid" > "$ref_file"
     fi
     unset _SBT_AUTOMATIC_ROOT
 }
@@ -52,14 +57,16 @@ _sbt_automatic_enter() {
     local sbt_root="$1"
     local ref_file
     ref_file=$(_sbt_automatic_ref_file "$sbt_root")
-    local count
-    count=$(( $(cat "$ref_file" 2>/dev/null || echo 0) + 1 ))
+    local count pid
+    count=$(( $(sed -n '1p' "$ref_file" 2>/dev/null || echo 0) + 1 ))
+    pid=$(sed -n '2p' "$ref_file" 2>/dev/null)
 
-    echo "$count" > "$ref_file"
-    if [[ $count -eq 1 ]]; then
+    if [[ $count -eq 1 ]] || { [[ -n "$pid" ]] && ! kill -0 "$pid" 2>/dev/null; }; then
         _sbt_automatic_log "starting sbt server" "$sbt_root"
         sleep infinity | nohup sbt --server --batch --no-colors >> "${sbt_root}/.sbt-automatic-log" 2>&1 &
+        pid=$!
     fi
+    printf '%s\n%s\n' "$count" "$pid" > "$ref_file"
     _SBT_AUTOMATIC_ROOT="$sbt_root"
 }
 
