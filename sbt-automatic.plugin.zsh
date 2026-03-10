@@ -18,8 +18,17 @@ _sbt_automatic_find_root() {
     return 1
 }
 
+_sbt_automatic_log() {
+    local msg
+    msg="[sbt-automatic] $1 ($2)"
+    echo "$msg"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "${2}/.sbt-automatic-log"
+}
+
 _sbt_automatic_ref_file() {
-    echo "${1}/.sbt-session-count"
+    local encoded
+    encoded="${1//\//_}"
+    echo "/tmp/${encoded}.sbt-session-count"
 }
 
 _sbt_automatic_leave() {
@@ -30,8 +39,8 @@ _sbt_automatic_leave() {
     count=$(( $(cat "$ref_file" 2>/dev/null || echo 0) - 1 ))
 
     if [[ $count -le 0 ]]; then
-        echo "[sbt-automatic] stopping sbt server... ($prev_root)"
-        sbt --client "shutdown" &>/dev/null
+        _sbt_automatic_log "stopping sbt server" "$prev_root"
+        (cd "$prev_root" && sbt --client "shutdown" &>/dev/null)
         rm -f "$ref_file"
     else
         echo "$count" > "$ref_file"
@@ -48,8 +57,8 @@ _sbt_automatic_enter() {
 
     echo "$count" > "$ref_file"
     if [[ $count -eq 1 ]]; then
-        echo "[sbt-automatic] starting sbt server... ($sbt_root)"
-        nohup sbt --no-colors "exit" &>/dev/null &
+        _sbt_automatic_log "starting sbt server" "$sbt_root"
+        nohup sbt --server --no-colors "exit" &>/dev/null &
     fi
     export _SBT_AUTOMATIC_ROOT="$sbt_root"
 }
