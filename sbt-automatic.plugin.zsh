@@ -46,6 +46,17 @@ _sbt_automatic_start_readiness_check() {
     )
 }
 
+_sbt_automatic_show_ghost() {
+    local fd=$1
+    zle -F "$fd"
+    exec {fd}<&-
+    _SBT_AUTOMATIC_TRIGGER_FD=""
+    if [[ -n "$_SBT_AUTOMATIC_STARTING" ]]; then
+        POSTDISPLAY=" [Starting sbt server...]"
+        zle -R
+    fi
+}
+
 _sbt_automatic_on_server_ready() {
     local fd=$1
     zle -F "$fd"
@@ -54,10 +65,15 @@ _sbt_automatic_on_server_ready() {
     _SBT_AUTOMATIC_FD=""
     _SBT_AUTOMATIC_ZLE_F_SET=""
     POSTDISPLAY=""
-    zle reset-prompt
+    zle -R
 }
 
 _sbt_automatic_cancel_ghost() {
+    if [[ -n "$_SBT_AUTOMATIC_TRIGGER_FD" ]]; then
+        zle -F "$_SBT_AUTOMATIC_TRIGGER_FD" 2>/dev/null
+        exec {_SBT_AUTOMATIC_TRIGGER_FD}<&-
+        _SBT_AUTOMATIC_TRIGGER_FD=""
+    fi
     if [[ -n "$_SBT_AUTOMATIC_FD" ]]; then
         zle -F "$_SBT_AUTOMATIC_FD" 2>/dev/null
         exec {_SBT_AUTOMATIC_FD}<&-
@@ -134,23 +150,25 @@ add-zsh-hook chpwd _sbt_automatic_chpwd
 add-zsh-hook zshexit _sbt_automatic_exit
 
 # -----------------------------------------------
-# Ghost text via zle
+# Ghost text via zle -F
 # -----------------------------------------------
 
-if (( ${+widgets[zle-line-init]} )); then
-    zle -A zle-line-init _sbt_automatic_orig_line_init
-fi
-
-_sbt_automatic_zle_line_init() {
-    (( ${+widgets[_sbt_automatic_orig_line_init]} )) && zle _sbt_automatic_orig_line_init
+_sbt_automatic_precmd_ghost() {
     if [[ -n "$_SBT_AUTOMATIC_STARTING" ]]; then
-        POSTDISPLAY=" [Starting sbt server...]"
+        # Register readiness check
         if [[ -z "$_SBT_AUTOMATIC_ZLE_F_SET" && -n "$_SBT_AUTOMATIC_FD" ]]; then
             zle -F "$_SBT_AUTOMATIC_FD" _sbt_automatic_on_server_ready
             _SBT_AUTOMATIC_ZLE_F_SET=1
         fi
+        # Trigger fd to set POSTDISPLAY inside zle context
+        if [[ -n "$_SBT_AUTOMATIC_TRIGGER_FD" ]]; then
+            zle -F "$_SBT_AUTOMATIC_TRIGGER_FD" 2>/dev/null
+            exec {_SBT_AUTOMATIC_TRIGGER_FD}<&-
+        fi
+        exec {_SBT_AUTOMATIC_TRIGGER_FD}< <(echo "show")
+        zle -F "$_SBT_AUTOMATIC_TRIGGER_FD" _sbt_automatic_show_ghost
     fi
 }
 
-zle -N zle-line-init _sbt_automatic_zle_line_init
+add-zsh-hook precmd _sbt_automatic_precmd_ghost
 
