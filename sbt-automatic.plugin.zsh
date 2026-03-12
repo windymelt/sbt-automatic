@@ -31,8 +31,45 @@ _sbt_automatic_ref_file() {
     echo "/tmp/${encoded}.sbt-session-count"
 }
 
+_sbt_automatic_start_readiness_check() {
+    local sbt_root="$1"
+    _SBT_AUTOMATIC_STARTING=1
+    _SBT_AUTOMATIC_ZLE_F_SET=""
+    exec {_SBT_AUTOMATIC_FD}< <(
+        local i=0
+        while (( i < 60 )); do
+            (cd "$sbt_root" && sbt --client "version") >/dev/null 2>&1 && break
+            sleep 2
+            (( i++ ))
+        done
+        echo "done"
+    )
+}
+
+_sbt_automatic_on_server_ready() {
+    local fd=$1
+    zle -F "$fd"
+    exec {fd}<&-
+    _SBT_AUTOMATIC_STARTING=""
+    _SBT_AUTOMATIC_FD=""
+    _SBT_AUTOMATIC_ZLE_F_SET=""
+    POSTDISPLAY=""
+    zle reset-prompt
+}
+
+_sbt_automatic_cancel_ghost() {
+    if [[ -n "$_SBT_AUTOMATIC_FD" ]]; then
+        zle -F "$_SBT_AUTOMATIC_FD" 2>/dev/null
+        exec {_SBT_AUTOMATIC_FD}<&-
+    fi
+    _SBT_AUTOMATIC_STARTING=""
+    _SBT_AUTOMATIC_FD=""
+    _SBT_AUTOMATIC_ZLE_F_SET=""
+}
+
 _sbt_automatic_leave() {
     local prev_root="$1"
+    _sbt_automatic_cancel_ghost
     local ref_file
     ref_file=$(_sbt_automatic_ref_file "$prev_root")
     local count pid
@@ -65,6 +102,7 @@ _sbt_automatic_enter() {
         _sbt_automatic_log "starting sbt server" "$sbt_root"
         sleep infinity | nohup sbt --server --batch --no-colors >> "${sbt_root}/.sbt-automatic-log" 2>&1 &
         pid=$!
+        _sbt_automatic_start_readiness_check "$sbt_root"
     fi
     printf '%s\n%s\n' "$count" "$pid" > "$ref_file"
     _SBT_AUTOMATIC_ROOT="$sbt_root"
@@ -94,4 +132,25 @@ _sbt_automatic_exit() {
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd _sbt_automatic_chpwd
 add-zsh-hook zshexit _sbt_automatic_exit
+
+# -----------------------------------------------
+# Ghost text via zle
+# -----------------------------------------------
+
+if (( ${+widgets[zle-line-init]} )); then
+    zle -A zle-line-init _sbt_automatic_orig_line_init
+fi
+
+_sbt_automatic_zle_line_init() {
+    (( ${+widgets[_sbt_automatic_orig_line_init]} )) && zle _sbt_automatic_orig_line_init
+    if [[ -n "$_SBT_AUTOMATIC_STARTING" ]]; then
+        POSTDISPLAY=" [Starting sbt server...]"
+        if [[ -z "$_SBT_AUTOMATIC_ZLE_F_SET" && -n "$_SBT_AUTOMATIC_FD" ]]; then
+            zle -F "$_SBT_AUTOMATIC_FD" _sbt_automatic_on_server_ready
+            _SBT_AUTOMATIC_ZLE_F_SET=1
+        fi
+    fi
+}
+
+zle -N zle-line-init _sbt_automatic_zle_line_init
 
